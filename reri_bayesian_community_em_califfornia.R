@@ -439,22 +439,6 @@ bar <- merge(bar, coords, by = "zcta", all.x=TRUE)
 names(bar) <- gsub("glmer", "glm", names(bar))
 fail$method <- gsub("glmer", "glm", fail$method)
 
-## data for plotting gray figures
-shape <- st_read(dsn = file.path("D:/Chen", "contours", "USPS_zipCA_byESRI", "USPS_zipCA_byESRI.shp"))  ### the ESRI product
-MainStates <- map_data("state")
-NewStates <- MainStates[MainStates$region ==  "california", ]
-NewStates <- df_to_SpatialPolygons(NewStates, "region", c("long", "lat"), 
-                                   CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"))
-NewStates_grey <- MainStates[MainStates$region ==  "california", ]
-
-## Get the map for prettier figures
-zcta.sp <- readOGR(file.path("D:/Chen/contours", "USPS_zipCA_byESRI",
-                             "USPS_zipCA_byESRI.shp"), stringsAsFactors = FALSE)
-## transform the spatialpolygon to data.frame
-zcta.sp@data$id <- rownames(zcta.sp@data)
-zcta.dt <- fortify(zcta.sp, region = "id")
-space <- merge(zcta.dt, zcta.sp@data[, c("ZIP_CODE", "id")], by = "id")
-
 for (m in methods) {
   set.seed(824)
   cat("\n\n", m, "\n")
@@ -587,8 +571,11 @@ methods <- c("month_wt", "year_wt", "month_glm", "year_glm")
 nc <- c(991, 994, 981, 990) #zipcodes included for each method
 names(nc) <- methods
 
+## read in variables for meta regression
+hpi <- fread(file.path(outdir1, "zip_selected_hpi3_hpi_wt_041823.csv"))
+
 ## population density
-zcta.sp <- readOGR(file.path("D:/Chen/contours", "tl_2010_06_zcta510",
+zcta.sp <- readOGR(file.path(outdir1, "tl_2010_06_zcta510",
                              "tl_2010_06_zcta510.shp"), stringsAsFactors = FALSE)
 area <- zcta.sp@data[, c("ZCTA5CE10", "ALAND10")]
 area$ZCTA5CE10 <- as.numeric(area$ZCTA5CE10)
@@ -603,7 +590,7 @@ hpi_vbs <- c("employed", "abovepoverty", "bachelorsed",
 hpi <- hpi[!is.na(employed) & !is.na(treecanopy), c("ZIP", hpi_vbs), with=FALSE]
 ### using more EM variables
 out <- numeric()
-sink(file.path(outdir1, "results", "summary of running meta regression reri_022723.txt"))
+sink(file.path(outdir1, "summary of running meta regression reri_022723.txt"))
 for (m in methods) {
   ## reri after pooling
   bayesDF <- fread(file.path(outdir1, "results", paste0(dataset, "_reri_", m, nc[m], "zcta.csv")))
