@@ -14,7 +14,7 @@ library(survival)
 library(msm)
 ##################
 if (!file.exists(file.path(outdir1, "results", "state_models"))) dir.create(file.path(outdir1, "results", "state_models"))
-dataset <- "eh85_wf0_binary_1773zcta"
+dataset <- "eh85_wf15_binary_1772zcta"
 
 ## calculation of reri--based on SAS codes from VanderWeele and Knol 2014 Appendix
 ## variance for joint effect based on deltamethod (car package)
@@ -139,7 +139,7 @@ write.csv(out, file.path(outdir1, "results", paste0(dataset, "_state_model_summa
 ## Bobb et al. 2014: controls identified as 1) within the window of 3 days before and after the exposed day in another year and 2) separated from any other exposed day for more than 2 days
 # library(lme4)
 library(survival)
-dataset <- "eh85_wf0_binary_1773zcta"
+dataset <- "eh85_wf15_binary_1772zcta"
 ##################
 ## identify potential control days for each exposed day based on Liu et al. method with controls identified as: 
 ## 1) within the window of nbuffer calendar days before or after the exposed day in another year and 
@@ -423,7 +423,7 @@ library(RColorBrewer)
 outdir2 <- file.path(outdir1, "figures", "spatial")
 if (!dir.exists(outdir2)) dir.create(outdir2)
 ##################
-dataset <- "eh85_wf0_binary_1773zcta"
+dataset <- "eh85_wf15_binary_1772zcta"
 if (!dir.exists(file.path(outdir2, dataset))) dir.create(file.path(outdir2, dataset))
 sink(file.path(outdir2, dataset, "summary of running spatial bayesian.txt"))
 
@@ -465,19 +465,20 @@ for (m in methods) {
   nn <- nrow(baz)
   baz <- baz[baz$pop>1000 &!is.na(baz$pop), ]
   cat("# of zctas removed due to no pop or pop<=1000 is", nn-nrow(baz), "\n")
+  cat("# of zctas left after 1k pop and exposure day criteria is", nrow(baz), "\n")
   ex.fail <- fail_m[fail_m$ngrps>0]
   ex.fail <- ex.fail[!ex.fail$zcta %in% fail.zcta, ]
   ex.fail <- ex.fail[ex.fail$zcta %in% baz$zcta, ]
   cat("# of zctas removed due to failures other than no exposed day or pop is", length(unique(ex.fail$zcta)), "\n")
   cat("zctas removed due to failures other than no exposed day or pop", "\n")
-  print(ex.fail)
+  print(merge(ex.fail, coords[,c("zcta", "pop")], by="zcta", all.x=TRUE))
   baz <- baz[!baz$zcta %in% ex.fail$zcta, ]
   
   ## calculate reri
   baz[, paste0(m, "_reri"):= eval(as.name(paste0(m, "_rr_eh1wf1"))) - eval(as.name(paste0(m, "_rr_eh1wf0"))) -
         eval(as.name(paste0(m, "_rr_eh0wf1"))) + 1]
   
-  ## drop extreme values in glm results
+  ## drop extreme values in glmer results
   if (sum(abs(baz[, paste0(m, "_reri"), with=FALSE]) > 50) >0) {
     fail.zcta2 <- unique(baz$zcta[abs(baz[, paste0(m, "_reri"), with=FALSE]) > 50])
     cat(length(fail.zcta2), "zcta removed due to large reri in", m, "\n")
@@ -506,37 +507,38 @@ for (m in methods) {
   n.samples = 10000
   if (m=="year_wt"){
     bef.sp <- spLM(est ~ 1, data = bayesDF, coords = as.matrix(bayesDF[,.(FinalLon, FinalLat)]),
-                   starting = list("phi" = 2, "sigma.sq" = 1.2, "tau.sq" = .5),
-                   tuning = list("phi" = 0.1, "sigma.sq" = 0.06, "tau.sq" = 0.025),
-                   priors = list("phi.Unif" = c(0.001, 6), "sigma.sq.IG" = c(2, 1/1.2)
-                                 , "tau.sq.IG" = c(2, 1/.5) ## for inverse gamma distribution, the two variables specified are shape = 2, scale = 1/avg = 1/rate = 1/starting value
-                   ),
+                   starting = list("phi" = 2, "sigma.sq" = 0.8, "tau.sq" = .5),
+                   tuning = list("phi" = 0.1, "sigma.sq" = 0.04, "tau.sq" = 0.025),
+                   priors = list("phi.Unif" = c(0.001, 6), "sigma.sq.IG" = c(2, 1/0.8)
+                                 , "tau.sq.IG" = c(2, 1/.5)
+                   ), ## actually used--(2, 1/mean) priors for IG
                    cov.model = "spherical", n.samples = n.samples, verbose = TRUE, n.report=2000)
   } else if (m=="month_wt") {
     bef.sp <- spLM(est ~ 1, data = bayesDF, coords = as.matrix(bayesDF[,.(FinalLon, FinalLat)]),
-                   starting = list("phi" = 3, "sigma.sq" = 2.5, "tau.sq" = 0.7),
-                   tuning = list("phi" = 0.15, "sigma.sq" = 0.125, "tau.sq" = 0.035),
-                   priors = list("phi.Unif" = c(0.001, 6), "sigma.sq.IG" = c(2, 1/2.5)
-                                 , "tau.sq.IG" = c(2, 1/0.7)
-                   ),
+                   starting = list("phi" = 2, "sigma.sq" = 2, "tau.sq" = .75),
+                   tuning = list("phi" = 0.1, "sigma.sq" = 0.1, "tau.sq" = 0.0375),
+                   priors = list("phi.Unif" = c(0.001, 6), "sigma.sq.IG" = c(2, 1/2)
+                                 , "tau.sq.IG" = c(2, 1/.75)
+                   ), ## actually used--(2, 1/mean) priors for IG
                    cov.model = "spherical", n.samples = n.samples, verbose = TRUE, n.report=2000)
   } else if (m=="year_glm") {
     bef.sp <- spLM(est ~ 1, data = bayesDF, coords = as.matrix(bayesDF[,.(FinalLon, FinalLat)]),
-                   starting = list("phi" = 2, "sigma.sq" = 1.5, "tau.sq" = 0.7), ## glm results
-                   tuning = list("phi" = 0.1, "sigma.sq" = 0.075, "tau.sq" = 0.035),
-                   priors = list("phi.Unif" = c(0.001, 6), "sigma.sq.IG" = c(2, 1/1/5)
+                   starting = list("phi" = 3, "sigma.sq" = 2, "tau.sq" = 0.7), ## glm results
+                   tuning = list("phi" = 0.15, "sigma.sq" = 0.1, "tau.sq" = 0.035),
+                   priors = list("phi.Unif" = c(0.001, 6), "sigma.sq.IG" = c(2, 1/2)
                                  , "tau.sq.IG" = c(2, 1/0.7)
-                   ),
+                   ), ## actually used--(2, 1/mean) priors for IG
                    cov.model = "spherical", n.samples = n.samples, verbose = TRUE, n.report=2000)
   } else if (m=="month_glm") {
     bef.sp <- spLM(est ~ 1, data = bayesDF, coords = as.matrix(bayesDF[,.(FinalLon, FinalLat)]),
-                   starting = list("phi" = 2, "sigma.sq" = 1.5, "tau.sq" = 0.8), ## glm results
-                   tuning = list("phi" = 0.1, "sigma.sq" = 0.075, "tau.sq" = 0.04),
-                   priors = list("phi.Unif" = c(0.001, 6), "sigma.sq.IG" = c(2, 1/1.5)
-                                 , "tau.sq.IG" = c(2, 1/0.8)
-                   ),
+                   starting = list("phi" = 2, "sigma.sq" = 1, "tau.sq" = 1), ## glm results
+                   tuning = list("phi" = 0.1, "sigma.sq" = 0.05, "tau.sq" = 0.05),
+                   priors = list("phi.Unif" = c(0.001, 6), "sigma.sq.IG" = c(2, 1/1)
+                                 , "tau.sq.IG" = c(2, 1/1)
+                   ), ## actually used--(2, 1/mean) priors for IG
                    cov.model = "spherical", n.samples = n.samples, verbose = TRUE, n.report=2000)
   }
+  
   
   cat("summary of thetas before burn-in", "\n")
   print(round(summary(mcmc(bef.sp$p.theta.samples))$quantiles, 3))
@@ -579,20 +581,26 @@ sink()
 ## All indicators were coded so that higher value represents better socioeconomical status (SES) based on previous believes, except for the ethnicity groups.  
 library(meta)
 ##################
-dataset <- "eh85_wf0_binary_1773zcta"
+dataset <- "eh85_wf15_binary_1772zcta"
 
 methods <- c("month_wt", "year_wt", "month_glm", "year_glm")
-nc <- c(844, 850, 839, 844) #zipcodes included for each method
+nc <- c(991, 994, 981, 990) #zipcodes included for each method
 names(nc) <- methods
 
-## read in variables for meta regression
-hpi <- fread(file.path(outdir1, "data", "zip_selected_hpi_popwt_022723.csv"))
+## population density
+zcta.sp <- readOGR(file.path("D:/Chen/contours", "tl_2010_06_zcta510",
+                             "tl_2010_06_zcta510.shp"), stringsAsFactors = FALSE)
+area <- zcta.sp@data[, c("ZCTA5CE10", "ALAND10")]
+area$ZCTA5CE10 <- as.numeric(area$ZCTA5CE10)
+hpi <- merge(hpi, area, by.x="ZIP", by.y="ZCTA5CE10", all.x=TRUE) 
+hpi$ALAND10 <- as.numeric(hpi$ALAND10)
+hpi$popden <- hpi$pop/hpi$ALAND10 * 10000 ## so that it's per 10k
 ## after transformation, all variables are true to its meaning and higher better
-hpi_vbs <- c("employed", "abovepoverty", "bachelorsed", "inhighschool",
-             "treecanopy", "parkaccess", "commute", "AC",
+hpi_vbs <- c("employed", "abovepoverty", "bachelorsed", 
+             "treecanopy", "AC", "insured", "percapitaincome", "automobile",
              "white", "black", "asian", "latino", "NativeAm","PacificIsl",
-             "lowownsevere", "lowrentsevere", "highincome")
-hpi <- hpi[!is.na(employed), ]
+             "popden")
+hpi <- hpi[!is.na(employed) & !is.na(treecanopy), c("ZIP", hpi_vbs), with=FALSE]
 ### using more EM variables
 out <- numeric()
 sink(file.path(outdir1, "results", "summary of running meta regression reri_022723.txt"))
@@ -602,11 +610,18 @@ for (m in methods) {
   ntemp <- nrow(bayesDF)
   cat("\n\n", "# of zctas with", m, "based reri is", ntemp, "\n")
   bayesDF <- merge(bayesDF, hpi, by.x="zcta", by.y="ZIP", all.x=TRUE)
-  bayesDF <- bayesDF[!is.na(bayesDF$employed), ]
+  bayesDF <- bayesDF[!is.na(employed), ]
   cat("# of zctas included in meta regression of", m, "based reri is", nrow(bayesDF), "\n")
   cat("# of zctas removed due to missing hpi in meta regression of", m, "based reri is", ntemp - nrow(bayesDF), "\n")
   
-  nms <- paste(rep(c("lm", "meta"), each=2), rep(c("coef", "se"), time=2), sep="_")
+  ## reri before pooling--there is no CI here...
+  bar[, paste0(m, "_reri"):= eval(as.name(paste0(m, "_rr_eh1wf1"))) - eval(as.name(paste0(m, "_rr_eh1wf0"))) -
+        eval(as.name(paste0(m, "_rr_eh0wf1"))) + 1]
+  baz <- bar[, c("zcta", paste0(m, "_reri")), with=FALSE]
+  names(baz)[2] <- "est_raw"
+  bayesDF <- merge(bayesDF, baz, by="zcta", all.x=TRUE) ## keep zctas included in Bayesian spatial pooling--removed extreme values
+  
+  nms <- paste(rep(c("lm", "meta", "lm_raw"), each=2), rep(c("coef", "se"), time=3), sep="_")
   estimate <- data.frame(vb=hpi_vbs,
                          min=NA, q1=NA, median=NA, q3=NA, max=NA, zcta5.used=NA, 
                          setNames(replicate(length(nms), NA, simplify = FALSE), nms))
@@ -627,6 +642,10 @@ for (m in methods) {
     m2 <- metagen(TE = w_hat_mu, seTE = w_hat_sd, studlab = zcta, data = bayesDF)
     g2 <- metareg(m2, as.formula(paste0(" ~ ", estimate$vb[i])))
     estimate[i, nms[3:4]] <- c(g2$beta[2], g2$se[2])
+    
+    ## linear regression of associations before bayesian spatial pooling
+    g3 <- lm(as.formula(paste0("est_raw ~ ", estimate$vb[i])), data=bayesDF)
+    estimate[i, nms[5:6]] <- summary(g3)$coefficients[2, 1:2]
     
     if (estimate$vb[i]=="AC") {
       bayesDF <- copy(cache)
